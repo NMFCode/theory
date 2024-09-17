@@ -1,8 +1,18 @@
 import Mathlib.CategoryTheory.Category.Basic
+import Mathlib.CategoryTheory.Closed.Cartesian
+import Mathlib.CategoryTheory.Functor.Const
+import Mathlib.CategoryTheory.Limits.Cones
+
 open CategoryTheory
+#print Limits.Cone
 
 -- Definition 19 (Side-effect free methods)
 def side_effect_free {A B Ω : Type u} (f : A × Ω → B × Ω) := ∀ x : A × Ω, (f x).2 = x.2
+
+#check id
+
+#check (Type 0 → Type 0 : Type 1)
+
 
 -- Example 17
 example {A Ω: Type u}: side_effect_free (@id (A×Ω)) := by simp [side_effect_free]
@@ -29,7 +39,6 @@ instance MutableTypeCategory :
   id X := fun X => X
   -- f ≫ g
   comp f g := fun X => (g (f X))
-
 
 lemma id_side_effect_free {A Ω : Type u}:
   side_effect_free (fun x : A × Ω => x) := by simp[side_effect_free]
@@ -74,18 +83,24 @@ instance MutableTypeCategory_Ω :
 -- TODO We further demand that the restriction of C to side-effect free
 --      morphisms C_Ω forms a cartesian-closed category.
 
+#check MutableTypeCategory
+
+
+-- class ClosedTypeSet (A : Type u) where
+--   prod: ∀ (X : {X : Type u // })
+
 def c := MutableTypeCategory obT Ω
 def c1 := MutableTypeCategory_Ω obT Ω
 
 -- universe v u
--- Category (obj : Type u)
+-- typeclass Category (obj : Type u) where
 -- -- Quiver
---   Hom : obj → obj → Sort v+1
+--   Hom : obj → obj → Type v
 -- -- CategoryStruct
---   -- (X : obj) → (V : Sort v+1): V := Hom X X
+--   -- (X : obj) → (V : Type v): V := Hom X X
 --   id : ∀ X : obj, Hom X X -- 𝟙
 --   -- {X Y Z : obj} → (f : Hom X Y) → (g : Hom Y Z) → (V : Hom X Z)
 --   -- f ≫ g = g ∘ f
---   comp : ∀ {X Y Z : obj}, (X ⟶ Y) → (Y ⟶ Z) → (X ⟶ Z)
+--   comp : {X Y Z : obj} →  (Hom X Y) → (Hom Y Z) → (Hom X Z)
 -- -- Category
---   id_comp : ∀ {X Y : obj} (f : X ⟶ Y), 𝟙 X ≫ f = f := by aesop_cat
+--   id_comp : ∀ {X Y : obj} (f : X ⟶ Y), id X ≫ f = f := by aesop_cat
