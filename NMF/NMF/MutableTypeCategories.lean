@@ -9,24 +9,21 @@ namespace MutableTypeCategories
 
 universe v u
 
-variable (Ω : Type u)
-
-structure MutableMorphism (A B : Type u) where
-  eval : (A × Ω) → (B × Ω)
+variable (Ω : Type v)
 
 @[simp]
-abbrev morph (A B : Type u) : Type u := (A×Ω) → (B×Ω)
+abbrev morph (A B : Type u) : Type (max u v) := (A×Ω) → (B×Ω)
 
 @[simp]
 abbrev comp {A B C : Type u} (f : morph Ω A B) (g : morph Ω B C) : morph Ω A C
   := fun a => g (f a)
 
 @[simp]
-def side_effect_free {A B Ω : Type u} (f : morph Ω A B) : Prop
+def side_effect_free {A B : Type u} {Ω : Type v} (f : morph Ω A B) : Prop
  := ∀ a : A × Ω, (f a).snd = a.snd
 
 @[simp]
-def stateless {A B Ω : Type u} (f : morph Ω A B) : Prop
+def stateless {A B : Type u} {Ω : Type v} (f : morph Ω A B) : Prop
  := ∀ a : A, ∀ ω : Ω, ∀ ω2 : Ω, (f (a,ω)).1 = (f (a,ω2)).1
 
 @[simp]
@@ -38,7 +35,7 @@ lemma id_sef (A : Type u) : side_effect_free (id_morph Ω A) := by
   rw [id_morph]
   simp
 
-lemma comp_side_effect_free {A B C Ω : Type u} (f : morph Ω A B) (g : morph Ω B C)
+lemma comp_side_effect_free {A B C : Type u} {Ω : Type v} (f : morph Ω A B) (g : morph Ω B C)
   : side_effect_free f ∧ side_effect_free g → side_effect_free (comp Ω f g) := by
   intro H
   rw[side_effect_free]
@@ -46,12 +43,12 @@ lemma comp_side_effect_free {A B C Ω : Type u} (f : morph Ω A B) (g : morph Ω
   rw[comp]
   rw [H.right, H.left]
 
-instance MutableTypeCategory : Category.{u} (Type u) where
+instance MutableTypeCategory : Category.{max u v} (Type u) where
   Hom A B := morph Ω A B
   id A := id_morph Ω A
   comp f g := fun a => g ( f a )
 
-structure Lens (Ω A B : Type u) where
+structure Lens (Ω : Type v) (A B : Type u) where
   get : morph Ω A B
   put : morph Ω (A × B) A
   get_side_effect_free : side_effect_free get
