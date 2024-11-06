@@ -2,6 +2,8 @@ import Mathlib.CategoryTheory.Category.Basic
 import Mathlib.CategoryTheory.Closed.Cartesian
 import Mathlib.CategoryTheory.Functor.Const
 import Mathlib.CategoryTheory.Limits.Cones
+import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Multiset.Basic
 
 open CategoryTheory
 
@@ -10,6 +12,10 @@ namespace MutableTypeCategories
 universe v u
 
 variable (Ω : Type v)
+
+/-
+# General mutable type category definitions
+-/
 
 @[simp]
 abbrev morph (A B : Type u) : Type (max u v) := (A×Ω) → (B×Ω)
@@ -47,6 +53,47 @@ instance MutableTypeCategory : Category.{max u v} (Type u) where
   Hom A B := morph Ω A B
   id A := id_morph Ω A
   comp f g := fun a => g ( f a )
+
+structure SideEffectFreeMorphism {Ω : Type v} (A B : Type u) where
+  m : morph Ω A B
+  proof : side_effect_free m
+
+instance SideEffectFreeMutableTypeCategory : Category.{max u v} (Type u) where
+  Hom A B := SideEffectFreeMorphism A B
+  id A := { m:= id_morph Ω A, proof:= id_sef Ω A}
+  comp f g := {
+    m := fun a => g.m ( f.m a),
+    proof := comp_side_effect_free f.m g.m (And.intro f.proof g.proof)
+  }
+
+/-
+# Collections
+-/
+
+open Finset
+open Multiset
+open Set
+
+structure LazyPowerset (A : Type u) where
+  eval : Ω → Finset A
+
+structure LazyMultiset (A : Type u) where
+  eval : Ω → Multiset A
+
+/-
+# TODO: Rauskriegen, wie man das für Multiset und Finset definieren kann (Set erlaubt unendliche Collections)
+-/
+structure LazySet (A : Type u) where
+  eval : Ω → Set A
+
+def lazy_set_func {A B : Type u} (f : morph Ω A B) (h : side_effect_free f) : morph Ω (LazySet Ω A) (LazySet Ω B) :=
+  fun (s : (LazySet Ω A) × Ω) => ({
+    eval:= fun (ω : Ω) => { b : B | ∃ a, a ∈ (s.1.eval ω) ∧ b = (f (a, ω)).1 }
+  }, s.2)
+
+/-
+# Synchronization block theory and lenses
+-/
 
 structure Lens (Ω : Type v) (A B : Type u) where
   get : morph Ω A B
