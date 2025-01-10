@@ -364,11 +364,90 @@ structure LazyListCollection (A : Type u) extends LazyList Ω A where
 structure LazySetCollection (A : Type u) extends LazyOrderedSet Ω A where
   apply : Ω → Set A → Ω
 
+@[simp]
 def eval_apply_powerset {A Ω : Type u} (c : LazyPowersetCollection Ω A) : Prop
   := ∀ ω : Ω, ∀ s : Finset A, c.eval (c.apply ω s) = s
 
+@[simp]
 def apply_eval_powerset {A Ω : Type u} (c : LazyPowersetCollection Ω A) : Prop
   := ∀ ω : Ω, c.apply ω (c.eval ω) = ω
+
+structure WellBehavedPowerset (Ω A : Type u) where
+  items : LazyPowersetCollection Ω A
+  eval_apply : eval_apply_powerset items
+  apply_eval : apply_eval_powerset items
+
+structure LazyPowersetCollectionSynchronizationBlock (ΩL ΩR A B C D : Type u) where
+  f : morph ΩL A (WellBehavedPowerset ΩL B)
+  g : morph ΩR C (WellBehavedPowerset ΩR D)
+  Φbase : A ≃ C
+  Φinh : Finset B ≃ Finset D
+  f_stateless : stateless f
+  g_stateless : stateless g
+
+@[simp]
+def consistent_powerset_collection {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : Prop
+  := s.Φinh ((s.f (a,ωL)).1.items.eval ωL) = (s.g (c,ωR)).1.items.eval ωR
+
+@[simp]
+def repair_right_powerset_collection {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : ΩR
+  := (s.g (c,ωR)).1.items.apply ωR (s.Φinh ((s.f (a,ωL)).1.items.eval ωL))
+
+@[simp]
+def repair_left_powerset_collection {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : ΩL
+  := (s.f (a,ωL)).1.items.apply ωL (s.Φinh.invFun ((s.g (c,ωR)).1.items.eval ωR))
+
+theorem repair_right_powerset_collection_repairs_inconsistency {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_powerset_collection s a c ωL (repair_right_powerset_collection s a c ωL ωR)
+  := by
+     simp
+     have h_g_stateless : (s.g (c, (s.g (c, ωR)).1.items.apply ωR (s.Φinh ((s.f (a, ωL)).1.items.eval ωL)))).1 = (s.g (c,ωR)).1
+        := by
+           exact s.g_stateless c ((s.g (c, ωR)).1.items.apply ωR (s.Φinh ((s.f (a, ωL)).1.items.eval ωL))) ωR
+     rw [h_g_stateless]
+     rw [(s.g (c, ωR)).1.eval_apply ωR (s.Φinh ((s.f (a, ωL)).1.items.eval ωL))]
+
+theorem repair_left_powerset_collection_repairs_inconsistency {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_powerset_collection s a c (repair_left_powerset_collection s a c ωL ωR) ωR
+  := by
+     simp
+     have h_f_stateless : (s.f (a, (s.f (a, ωL)).1.items.apply ωL (s.Φinh.symm ((s.g (c, ωR)).1.items.eval ωR)))).1 = (s.f (a,ωL)).1
+        := by
+           exact s.f_stateless a ((s.f (a, ωL)).1.items.apply ωL (s.Φinh.symm ((s.g (c, ωR)).1.items.eval ωR))) ωL
+     rw [h_f_stateless]
+     rw [(s.f (a, ωL)).1.eval_apply ωL (s.Φinh.symm ((s.g (c, ωR)).1.items.eval ωR))]
+     simp
+
+theorem repair_right_powerset_collection_hippocratic {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_powerset_collection s a c ωL ωR → (repair_right_powerset_collection s a c ωL ωR) = ωR
+  := by
+     simp
+     intro h
+     rw [h]
+     exact (s.g (c, ωR)).1.apply_eval ωR
+
+theorem repair_left_powerset_collection_hippocratic {ΩL ΩR A B C D : Type u}
+  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_powerset_collection s a c ωL ωR → (repair_left_powerset_collection s a c ωL ωR) = ωL
+  := by
+     simp
+     intro h
+     have h_inv : s.Φinh.symm ((s.g (c, ωR)).1.items.eval ωR) = (s.f (a, ωL)).1.items.eval ωL
+      := by
+         symm
+         rw [← h]
+         simp
+     rw [h_inv]
+     exact (s.f (a, ωL)).1.apply_eval ωL
 
 abbrev SetSynchronizationBlock (ΩL ΩR A B C D : Type u) := SynchronizationBlock ΩL ΩR A (Set B) C (Set D)
 
