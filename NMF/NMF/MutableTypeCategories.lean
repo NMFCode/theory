@@ -11,18 +11,18 @@ namespace MutableTypeCategories
 
 universe u
 
-variable (Ω : Type u)
 
 /-
 # General mutable type category definitions
 -/
 
+variable (Ω : Type u)
 @[simp]
 abbrev morph (A B : Type u) : Type u := (A×Ω) → (B×Ω)
 
 @[simp]
 abbrev comp {A B C : Type u} (f : morph Ω A B) (g : morph Ω B C) : morph Ω A C
-  := fun a => g (f a)
+  := g ∘ f
 
 @[simp]
 def side_effect_free {A B : Type u} {Ω : Type u} (f : morph Ω A B) : Prop
@@ -39,33 +39,31 @@ def id_morph (A : Type u) : morph Ω A A
 lemma id_sef (A : Type u) : side_effect_free (id_morph Ω A) := by
   simp
 
-lemma comp_side_effect_free {A B C : Type u} {Ω : Type u} (f : morph Ω A B) (g : morph Ω B C)
-  : side_effect_free f ∧ side_effect_free g → side_effect_free (comp Ω f g) := by
-  intro H
-  rw[side_effect_free]
-  intro a
-  rw[comp]
-  rw [H.right, H.left]
+lemma id_stateless (A : Type u) : stateless (id_morph Ω A) := by simp
 
-instance MutableTypeCategory : Category.{max u u} (Type u) where
+lemma comp_side_effect_free {A B C : Type u} {Ω : Type u} (f : morph Ω A B) (g : morph Ω B C)
+  : side_effect_free f ∧ side_effect_free g → side_effect_free (comp Ω f g)
+  := by intro H; rw[side_effect_free]; intro a; rw[comp]; simp; rw [H.right, H.left]
+
+instance MutableTypeCategory : Category.{u} (Type u) where
   Hom A B := morph Ω A B
   id A := id_morph Ω A
-  comp f g := fun a => g ( f a )
+  comp f g := g ∘ f
 
 structure SideEffectFreeMorphism {Ω : Type u} (A B : Type u) where
   m : morph Ω A B
   proof : side_effect_free m
 
-instance SideEffectFreeMutableTypeCategory : Category.{max u u} (Type u) where
+instance SideEffectFreeMutableTypeCategory : Category.{u} (Type u) where
   Hom A B := SideEffectFreeMorphism A B
   id A := { m:= id_morph Ω A, proof:= id_sef Ω A}
   comp f g := {
-    m := fun a => g.m ( f.m a),
+    m := g.m ∘ f.m
     proof := comp_side_effect_free f.m g.m (And.intro f.proof g.proof)
   }
 
 /-
-# Collections
+# Lazy Collections
 -/
 
 open Finset
@@ -166,6 +164,12 @@ def unit_lazy_list { A B : Type u} (f : morph Ω A B) : morph Ω A (LazyList Ω 
     eval := fun ω => [ (f (a,ω)).1 ]
   }, ω2)
 
+structure OrderedSet (A : Type u) where
+  items : List A
+  nodup : Nodup items
+
+structure LazyOrderedSet (A : Type u) where
+  eval : Ω → OrderedSet A
 
 /-
 # Synchronization block theory and lenses
@@ -195,13 +199,14 @@ def transient (f : Lens Ω A B) := side_effect_free f.put ∧ stateless f.get
 
 def Lens.comp {A B C : Type u} (f : Lens Ω A B) (g : Lens Ω B C) : Lens Ω A C
   := {
-    get := fun a => g.get (f.get a)
+    get := g.get ∘ f.get
     put := fun a =>
       let gput := g.put (((f.get (a.fst.fst, a.snd)).fst, a.fst.snd), a.snd)
       f.put ((a.fst.fst, gput.fst), gput.snd)
     get_side_effect_free := by
       rw [side_effect_free]
       intro a
+      simp
       rw [g.get_side_effect_free, f.get_side_effect_free]
   }
 
@@ -346,71 +351,77 @@ theorem left_repair_hippocratic {ΩL ΩR A B C D : Type u} (s : SynchronizationB
 # Collection-valued synchronization blocks
 -/
 
-structure SetSynchronizationBlock (ΩL ΩR A B C D : Type u) where
+
+structure LazyPowersetCollection (A : Type u) extends LazyPowerset Ω A where
+  apply : Ω → Finset A → Ω
+
+structure LazyMultisetCollection (A : Type u) extends LazyMultiset Ω A where
+  apply : Ω → Multiset A → Ω
+
+structure LazyListCollection (A : Type u) extends LazyList Ω A where
+  apply : Ω → List A → Ω
+
+structure LazySetCollection (A : Type u) extends LazyOrderedSet Ω A where
+  apply : Ω → Set A → Ω
+
+def eval_apply_powerset {A Ω : Type u} (c : LazyPowersetCollection Ω A) : Prop
+  := ∀ ω : Ω, ∀ s : Finset A, c.eval (c.apply ω s) = s
+
+def apply_eval_powerset {A Ω : Type u} (c : LazyPowersetCollection Ω A) : Prop
+  := ∀ ω : Ω, c.apply ω (c.eval ω) = ω
+
+abbrev SetSynchronizationBlock (ΩL ΩR A B C D : Type u) := SynchronizationBlock ΩL ΩR A (Set B) C (Set D)
+
+abbrev ListSynchronizationBlock (ΩL ΩR A B C D : Type u) := SynchronizationBlock ΩL ΩR A (List B) C (List D)
+
+structure LazySetSemiSynchronizationBlock (ΩL ΩR A B C D : Type u) where
   f : Lens ΩL A (LazySet ΩL B)
   g : Lens ΩR C (LazySet ΩR D)
   Φbase : A ≃ C
   Φinh : B ≃ D
   f_persistent : persistent ΩL f
   g_persistent : persistent ΩR g
+  f_putget : put_get ΩL f
+  g_putget : put_get ΩR g
+
+structure LazySetSynchronizationBlock (ΩL ΩR A B C D : Type u) extends LazySetSemiSynchronizationBlock ΩL ΩR A B C D where
   f_wellbehaved : well_behaved ΩL f
   g_wellbehaved : well_behaved ΩR g
 
-structure ListSynchronizationBlock (ΩL ΩR A B C D : Type u) where
+structure LazyListSemiSynchronizationBlock (ΩL ΩR A B C D : Type u) where
   f : Lens ΩL A (LazyList ΩL B)
   g : Lens ΩR C (LazyList ΩR D)
   Φbase : A ≃ C
   Φinh : B ≃ D
   f_persistent : persistent ΩL f
   g_persistent : persistent ΩR g
+  f_putget : put_get ΩL f
+  g_putget : put_get ΩR g
+
+structure LazyListSynchronizationBlock (ΩL ΩR A B C D : Type u) extends LazyListSemiSynchronizationBlock ΩL ΩR A B C D where
   f_wellbehaved : well_behaved ΩL f
   g_wellbehaved : well_behaved ΩR g
 
 open LawfulBEq
 
 @[simp]
-def consistent_set {ΩL ΩR A B C D : Type u} (s : SetSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
+def consistent_lazy_set {ΩL ΩR A B C D : Type u} (s : LazySetSemiSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
   := Set.BijOn s.Φinh ((s.f.get (a,ωL)).1.eval ωL) ((s.g.get (c,ωR)).1.eval ωR)
 
 @[simp]
-def consistent_list {ΩL ΩR A B C D : Type u} [DecidableEq D] (s : ListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
+def consistent_lazy_list {ΩL ΩR A B C D : Type u} [DecidableEq D] (s : LazyListSemiSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
   := List.beq (((s.f.get (a,ωL)).1.eval ωL).map s.Φinh) ((s.g.get (c,ωR)).1.eval ωR)
 
 @[simp]
-def repair_right_list {ΩL ΩR A B C D : Type u} (s : ListSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+def repair_right_lazy_list {ΩL ΩR A B C D : Type u} (s : LazyListSemiSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
   := (s.g.put ((c, lift_list_lazy (((s.f.get (a,ωL)).1.eval ωL).map s.Φinh)), ωR)).2
 
 @[simp]
-def repair_left_list {ΩL ΩR A B C D : Type u} (s : ListSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+def repair_left_lazy_list {ΩL ΩR A B C D : Type u} (s : LazyListSemiSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
   := (s.f.put ((a, lift_list_lazy (((s.g.get (c,ωR)).1.eval ωR).map s.Φinh.symm)), ωL)).2
 
-
-theorem right_repair_list_repairs_inconsistency {ΩL ΩR A B C D : Type u} [DecidableEq D] (s : ListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
-  : consistent_list s ωL (repair_right_list s a c ωL ωR) a c
-  := by
-  simp
-  have h_comega_cancels_out := s.g_persistent c (lift_list_lazy (((s.f.get (a, ωL)).1.eval ωL).map s.Φinh)) ωR
-  simp at h_comega_cancels_out
-  have h_simplifyput : (c, (s.g.put ((c, (lift_list_lazy (((s.f.get (a, ωL)).1.eval ωL).map s.Φinh))), ωR)).2) = (s.g.put ((c, (lift_list_lazy (((s.f.get (a, ωL)).1.eval ωL).map s.Φinh))), ωR)) :=
-   by
-   rw[Prod.mk_inj_right]
-   symm
-   exact h_comega_cancels_out
-  simp at h_simplifyput
-  rw[h_simplifyput]
-  have g_getput := s.g_wellbehaved.right c ωR (lift_list_lazy (((s.f.get (a, ωL)).1.eval ωL).map s.Φinh))
-  obtain ⟨a2, ht⟩ := g_getput
-  obtain ⟨ω2,ha2⟩ := ht
-  simp at ha2
-  rw[ha2.left,ha2.right]
-  simp
-  induction (List.map (⇑s.Φinh) ((s.f.get (a, ωL)).1.eval ωL)) with
-    | nil => rw[List.beq]
-    | cons d ds hd => rw[List.beq,hd]; simp
-
-
-theorem left_repair_list_repairs_inconsistency {ΩL ΩR A B C D : Type u} [DecidableEq D] (s : ListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
-  : consistent_list s (repair_left_list s a c ωL ωR) ωR a c
+theorem left_repair_lazy_list_repairs_inconsistency {ΩL ΩR A B C D : Type u} [DecidableEq D] (s : LazyListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
+  : consistent_lazy_list s.toLazyListSemiSynchronizationBlock (repair_left_lazy_list s.toLazyListSemiSynchronizationBlock a c ωL ωR) ωR a c
   := by
   simp
   have h_comega_cancels_out := s.f_persistent a (lift_list_lazy (((s.g.get (c, ωR)).1.eval ωR).map s.Φinh.invFun)) ωL
@@ -450,22 +461,6 @@ lemma helper_because_list_beq_does_not_work {D : Type u} [DecidableEq D] (L1 L2 
 abbrev eq_at_omega {A B C Ω : Type u} (m : morph Ω (C×(LazyList Ω A)) B) (ω : Ω)
   := ∀ c : C, ∀ l1 l2 : LazyList Ω A, l1.eval ω = l2.eval ω → m ((c,l1), ω) = m ((c,l2), ω)
 
-theorem right_repair_list_hippocratic {ΩL ΩR A B C D : Type u} [DecidableEq D]
-    (s : ListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
-    (h : eq_at_omega s.g.put ωR)
-  : consistent_list s ωL ωR a c → (repair_right_list s a c ωL ωR) = ωR
-  := by
-  simp
-  intro hc
-  have g_putget := s.g_wellbehaved.left (c,ωR)
-  simp at g_putget
-  rw[eq_at_omega] at h
-  apply helper_because_list_beq_does_not_work (List.map (⇑s.Φinh) ((s.f.get (a, ωL)).1.eval ωL)) ((s.g.get (c, ωR)).1.eval ωR) at hc
-  rw [hc]
-  have h_put_ignores_omega := h c ({ eval := fun _ ↦ (s.g.get (c, ωR)).1.eval ωR }) (s.g.get (c, ωR)).1
-  simp at h_put_ignores_omega
-  rw [h_put_ignores_omega,g_putget]
-
 lemma symm_inverts_list {A B : Type u} (l1 : List A) (l2 : List B) (eq : A ≃ B)
   : List.map eq l1 = l2 → List.map eq.symm l2 = l1
   := by
@@ -490,10 +485,26 @@ lemma symm_inverts_list {A B : Type u} (l1 : List A) (l2 : List B) (eq : A ≃ B
               exact h.left
             exact And.intro ha2 has
 
-theorem left_repair_list_hippocratic {ΩL ΩR A B C D : Type u} [DecidableEq D]
-    (s : ListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
+theorem right_repair_lazy_list_hippocratic {ΩL ΩR A B C D : Type u} [DecidableEq D]
+    (s : LazyListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
+    (h : eq_at_omega s.g.put ωR)
+  : consistent_lazy_list s.toLazyListSemiSynchronizationBlock ωL ωR a c → (repair_right_lazy_list s.toLazyListSemiSynchronizationBlock a c ωL ωR) = ωR
+  := by
+  simp
+  intro hc
+  have g_putget := s.g_wellbehaved.left (c,ωR)
+  simp at g_putget
+  rw[eq_at_omega] at h
+  apply helper_because_list_beq_does_not_work (List.map (⇑s.Φinh) ((s.f.get (a, ωL)).1.eval ωL)) ((s.g.get (c, ωR)).1.eval ωR) at hc
+  rw [hc]
+  have h_put_ignores_omega := h c ({ eval := fun _ ↦ (s.g.get (c, ωR)).1.eval ωR }) (s.g.get (c, ωR)).1
+  simp at h_put_ignores_omega
+  rw [h_put_ignores_omega,g_putget]
+
+theorem left_repair_lazy_list_hippocratic {ΩL ΩR A B C D : Type u} [DecidableEq D]
+    (s : LazyListSynchronizationBlock ΩL ΩR A B C D) (ωL : ΩL) (ωR : ΩR) (a : A) (c : C)
     (h : eq_at_omega s.f.put ωL)
-  : consistent_list s ωL ωR a c → (repair_left_list s a c ωL ωR) = ωL
+  : consistent_lazy_list s.toLazyListSemiSynchronizationBlock ωL ωR a c → (repair_left_lazy_list s.toLazyListSemiSynchronizationBlock a c ωL ωR) = ωL
   := by
   simp
   intro hc
@@ -516,6 +527,98 @@ theorem left_repair_list_hippocratic {ΩL ΩR A B C D : Type u} [DecidableEq D]
 -/
 
 @[simp]
+def lift_equiv_list {A B : Type u} (Φ : A ≃ B) : (List A ≃ List B)
+  := {
+    toFun := List.map Φ,
+    invFun := List.map Φ.invFun
+    left_inv := List.map_leftInverse_iff.mpr Φ.left_inv
+    right_inv := List.map_leftInverse_iff.mpr Φ.symm.left_inv
+  }
+
+@[simp]
+def lift_equiv_multiset {A B : Type u} (Φ : A ≃ B) : (Multiset A ≃ Multiset B)
+  := {
+    toFun := Multiset.map Φ
+    invFun := Multiset.map Φ.symm
+    left_inv := by
+      rw[Function.LeftInverse]
+      intro a
+      rw [Multiset.map_map]
+      have h : Φ.symm ∘ Φ = Equiv.refl A
+        := by simp
+      rw[h]
+      simp
+    right_inv := by
+      rw[Function.RightInverse]
+      intro b
+      simp
+  }
+
+@[simp]
+def lift_equiv_set {A B : Type u} (Φ : A ≃ B) : (Finset A ≃ Finset B)
+  := {
+    toFun := Finset.map Φ
+    invFun := Finset.map Φ.symm
+    left_inv := by
+      rw[Function.LeftInverse]
+      intro a
+      rw [Finset.map_map]
+      have h : Φ.toEmbedding.trans Φ.symm.toEmbedding = Equiv.refl A
+        := by simp
+      rw[h]
+      simp
+    right_inv := by
+      rw[Function.RightInverse]
+      intro b
+      rw[Finset.map_map]
+      have h : Φ.symm.toEmbedding.trans Φ.toEmbedding = Equiv.refl B
+        := by
+        rw[← Equiv.symm_symm Φ]
+        simp
+      rw[h]
+      simp
+  }
+
+@[simp]
+def lift_equiv_orderedset {A B : Type u} [DecidableEq A] [DecidableEq B] (Φ : A ≃ B) : (OrderedSet A ≃ OrderedSet B)
+  := {
+    toFun := fun l => {
+      items := (List.map Φ l.items).dedup
+      nodup := by rw [← List.dedup_eq_self, List.dedup_idem]
+    } ,
+    invFun := fun l => {
+      items := (List.map Φ.invFun l.items).dedup
+      nodup := by rw [← List.dedup_eq_self, List.dedup_idem]
+    }
+    left_inv := by
+      rw [Function.LeftInverse]
+      intro a
+      have h_aitems_dedup_eq : a.items.dedup = a.items
+        := List.dedup_eq_self.mpr a.nodup
+      have h_items : (List.map Φ.symm (List.map (Φ) a.items).dedup).dedup = a.items
+        := by
+           rw [List.dedup_map_of_injective Φ.injective]
+           rw [h_aitems_dedup_eq]
+           rw [List.map_map]
+           simp
+           exact h_aitems_dedup_eq
+      simp_all
+    right_inv := by
+      rw [Function.RightInverse]
+      intro b
+      have h_bitems_dedup_eq : b.items.dedup = b.items
+        := List.dedup_eq_self.mpr b.nodup
+      have h_items : (List.map Φ (List.map (Φ.symm) b.items).dedup).dedup = b.items
+        := by
+           rw [List.dedup_map_of_injective Φ.symm.injective]
+           rw [h_bitems_dedup_eq]
+           rw [List.map_map]
+           simp
+           exact h_bitems_dedup_eq
+      simp_all
+  }
+
+@[simp]
 def unit_lazy_list_put { A B : Type u} (f : morph Ω (A×B) A) : morph Ω (A×(LazyList Ω B)) A
   := fun (a,ω) => let list := a.2.eval ω
      match list with
@@ -523,21 +626,21 @@ def unit_lazy_list_put { A B : Type u} (f : morph Ω (A×B) A) : morph Ω (A×(L
       | b :: _ => f ((a.1, b),ω)
 
 @[simp]
-def lift_morph_list {A B Ω : Type u} (l : Lens Ω A B) : Lens Ω A (LazyList Ω B)
+def lift_morph_lazy_list {A B Ω : Type u} (l : Lens Ω A B) : Lens Ω A (LazyList Ω B)
  := {
   get := unit_lazy_list Ω l.get
   put := unit_lazy_list_put Ω l.put
   get_side_effect_free := by simp
  }
 
-lemma lift_list_putget {A B Ω : Type u} (l : Lens Ω A B) : put_get Ω l → put_get Ω (lift_morph_list l) := by
+lemma lift_list_putget {A B Ω : Type u} (l : Lens Ω A B) : put_get Ω l → put_get Ω (lift_morph_lazy_list l) := by
   intro h
   simp
   intro a ω
   rw [put_get] at h
   exact h (a,ω)
 
-lemma lift_list_persistent {A B Ω : Type u} (l : Lens Ω A B) : persistent Ω l → persistent Ω (lift_morph_list l) := by
+lemma lift_list_persistent {A B Ω : Type u} (l : Lens Ω A B) : persistent Ω l → persistent Ω (lift_morph_lazy_list l) := by
   simp
   intro l_persistent
   intro a bs ω
@@ -547,35 +650,29 @@ lemma lift_list_persistent {A B Ω : Type u} (l : Lens Ω A B) : persistent Ω l
   exact l_persistent a b ω
 
 @[simp]
-def lift_synchronizationBlock_list {ΩL ΩR A B C D : Type u} (b : SynchronizationBlock ΩL ΩR A B C D)
-   (h_getput_f : get_put ΩL (lift_morph_list b.f) )
-   (h_getput_g : get_put ΩR (lift_morph_list b.g) )
-  : ListSynchronizationBlock ΩL ΩR A B C D
+def lift_synchronizationBlock_lazy_list {ΩL ΩR A B C D : Type u} (b : SynchronizationBlock ΩL ΩR A B C D)
+  : LazyListSemiSynchronizationBlock ΩL ΩR A B C D
   := {
-    f := lift_morph_list b.f
-    g := lift_morph_list b.g
+    f := lift_morph_lazy_list b.f
+    g := lift_morph_lazy_list b.g
     Φbase := b.Φbase
     Φinh := b.Φinh
     f_persistent := (lift_list_persistent b.f) b.f_persistent
     g_persistent := (lift_list_persistent b.g) b.g_persistent
-    f_wellbehaved := And.intro ((lift_list_putget b.f) b.f_wellbehaved.left) h_getput_f
-    g_wellbehaved := And.intro ((lift_list_putget b.g) b.g_wellbehaved.left) h_getput_g
+    f_putget := (lift_list_putget b.f) b.f_wellbehaved.left
+    g_putget := (lift_list_putget b.g) b.g_wellbehaved.left
   }
 
 theorem lifted_synchronization_block_consistent_repair_right {ΩL ΩR A B C D : Type u}
    (s : SynchronizationBlock ΩL ΩR A B C D)
-   (h_getput_f : get_put ΩL (lift_morph_list s.f) )
-   (h_getput_g : get_put ΩR (lift_morph_list s.g) )
    (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
-   : repair_right s a c ωL ωR = repair_right_list (lift_synchronizationBlock_list s h_getput_f h_getput_g) a c ωL ωR
+   : repair_right s a c ωL ωR = repair_right_lazy_list (lift_synchronizationBlock_lazy_list s) a c ωL ωR
    := by simp
 
 theorem lifted_synchronization_block_consistent_repair_left {ΩL ΩR A B C D : Type u}
    (s : SynchronizationBlock ΩL ΩR A B C D)
-   (h_getput_f : get_put ΩL (lift_morph_list s.f) )
-   (h_getput_g : get_put ΩR (lift_morph_list s.g) )
    (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
-   : repair_left s a c ωL ωR = repair_left_list (lift_synchronizationBlock_list s h_getput_f h_getput_g) a c ωL ωR
+   : repair_left s a c ωL ωR = repair_left_lazy_list (lift_synchronizationBlock_lazy_list s) a c ωL ωR
    := by simp
 
 end MutableTypeCategories
