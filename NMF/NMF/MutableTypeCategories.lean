@@ -180,15 +180,15 @@ structure Lens (Ω : Type u) (A B : Type u) where
   get_side_effect_free : side_effect_free get
 
 @[simp]
-def put_get (f : Lens Ω A B) :=
+def get_put (f : Lens Ω A B) :=
   ∀ a : A×Ω, f.put ((a.fst, (f.get a).fst), a.snd) = a
 
 @[simp]
-def get_put (f : Lens Ω A B) :=
+def put_get (f : Lens Ω A B) :=
   ∀ a : A, ∀ ω : Ω, ∀ b : B, ∃ a2 : A, ∃ ω2 : Ω, f.put ((a,b), ω) = (a2,ω2) ∧ f.get (a2, ω2) = (b,ω2)
 
 @[simp]
-def well_behaved (f : Lens Ω A B) := put_get Ω f ∧ get_put Ω f
+def well_behaved (f : Lens Ω A B) := get_put Ω f ∧ put_get Ω f
 
 @[simp]
 def persistent (f : Lens Ω A B) := ∀ a : A, ∀ b : B, ∀ ω : Ω, (f.put ((a,b),ω)).fst = a
@@ -209,62 +209,60 @@ def Lens.comp {A B C : Type u} (f : Lens Ω A B) (g : Lens Ω B C) : Lens Ω A C
       rw [g.get_side_effect_free, f.get_side_effect_free]
   }
 
-theorem comp_wellbehaved_putget { A B C : Type u} (f : Lens Ω A B) (g : Lens Ω B C) :
-  well_behaved Ω f ∧ well_behaved Ω g → put_get Ω (Lens.comp Ω f g) := by
+theorem comp_wellbehaved_getput { A B C : Type u} (f : Lens Ω A B) (g : Lens Ω B C) :
+  well_behaved Ω f ∧ well_behaved Ω g → get_put Ω (Lens.comp Ω f g) := by
   intro H
   have f_wellbehaved : well_behaved Ω f := H.left
   have g_wellbehaved : well_behaved Ω g := H.right
-  rw [put_get]
+  rw [get_put]
   intro a
   rw [Lens.comp]
   simp
-  have g_putget := g_wellbehaved.left (f.get a)
+  have g_getput := g_wellbehaved.left (f.get a)
   have hSimpleF : (f.get a).2 = a.2 := by
     rw[f.get_side_effect_free]
-  rw[hSimpleF] at g_putget
-  rw[g_putget]
-  have f_putget := f_wellbehaved.left a
-  rw [← hSimpleF] at f_putget
-  exact f_putget
+  rw[hSimpleF] at g_getput
+  rw[g_getput]
+  have f_getput := f_wellbehaved.left a
+  rw [← hSimpleF] at f_getput
+  exact f_getput
 
 theorem comp_transient_wellbehaved { A B C : Type u} (f : Lens Ω A B) (g : Lens Ω B C) :
-  well_behaved Ω f ∧ well_behaved Ω g ∧ transient Ω g → well_behaved Ω (Lens.comp Ω f g) := by
+  well_behaved Ω f ∧ well_behaved Ω g ∧ stateless g.get → well_behaved Ω (Lens.comp Ω f g) := by
   intro H
   have f_wellbehaved : well_behaved Ω f := H.left
   have g_wellbehaved : well_behaved Ω g := H.right.left
-  have g_transient := H.right.right
-  rw[transient,side_effect_free] at g_transient
+  have g_stateless := H.right.right
   apply And.intro
-  exact comp_wellbehaved_putget Ω f g (And.intro f_wellbehaved g_wellbehaved)
-  rw [get_put]
+  exact comp_wellbehaved_getput Ω f g (And.intro f_wellbehaved g_wellbehaved)
+  rw [put_get]
   intro a ω c
   rw [Lens.comp]
   simp
-  have g_getput := g_wellbehaved.right (f.get (a,ω)).1 ω c
-  obtain ⟨b, ht⟩ := g_getput
-  obtain ⟨ω2, ha2⟩ := ht
-  have hOmegasEqual := g_transient.left (((f.get (a, ω)).1, c),ω)
-  rw[ha2.left] at hOmegasEqual
-  simp at hOmegasEqual
-  rw [hOmegasEqual] at ha2
+  have f_putget := f_wellbehaved.right a (g.put (((f.get (a, ω)).1, c), ω)).2 (g.put (((f.get (a, ω)).1, c), ω)).1
+  obtain ⟨a2,ht⟩ := f_putget
+  obtain ⟨ω2,ha2⟩ := ht
   rw[ha2.left]
-  simp
-  have f_getput := f_wellbehaved.right a ω b
-  obtain ⟨a2,ht⟩ := f_getput
-  obtain ⟨ω3,ha3⟩ := ht
   use a2
-  use ω3
+  use ω2
   apply And.intro
-  exact ha3.left
-  rw[ha3.right]
-  have hb := g_transient.right b ω3 ω
-  rw[ha2.right] at hb
-  simp at hb
-  have ho := g.get_side_effect_free (b,ω3)
-  simp at ho
-  rw[←hb]
-  nth_rewrite 3 [← ho]
+  rfl
+  have ha3 := ha2.right
+  rw[ha3]
+  have g_putget := g_wellbehaved.right (f.get (a,ω)).1 ω c
+  obtain ⟨b, ht⟩ := g_putget
+  obtain ⟨ω3, ht2⟩ := ht
+  have g_getput := ht2.right
+  rw[← ht2.left] at g_getput
+  have c_equals := g_stateless (g.put (((f.get (a, ω)).1, c), ω)).1 (g.put (((f.get (a, ω)).1, c), ω)).2 ω2
+  rw [g_getput] at c_equals
+  simp at c_equals
+  have omega_keeps : (g.get ((g.put (((f.get (a, ω)).1, c), ω)).1, ω2)).2 = ω2
+    := g.get_side_effect_free ((g.put (((f.get (a, ω)).1, c), ω)).1, ω2)
+  nth_rewrite 2 [c_equals]
+  nth_rewrite 3 [← omega_keeps]
   simp
+
 
 /-
 # Synchronization blocks
@@ -471,8 +469,8 @@ structure LazyListSemiSynchronizationBlock (ΩL ΩR A B C D : Type u) where
   Φinh : B ≃ D
   f_persistent : persistent ΩL f
   g_persistent : persistent ΩR g
-  f_putget : put_get ΩL f
-  g_putget : put_get ΩR g
+  f_getput : get_put ΩL f
+  g_getput : get_put ΩR g
 
 structure LazyListSynchronizationBlock (ΩL ΩR A B C D : Type u) extends LazyListSemiSynchronizationBlock ΩL ΩR A B C D where
   f_wellbehaved : well_behaved ΩL f
@@ -709,11 +707,11 @@ def lift_morph_lazy_list {A B Ω : Type u} (l : Lens Ω A B) : Lens Ω A (LazyLi
   get_side_effect_free := by simp
  }
 
-lemma lift_list_putget {A B Ω : Type u} (l : Lens Ω A B) : put_get Ω l → put_get Ω (lift_morph_lazy_list l) := by
+lemma lift_list_getput {A B Ω : Type u} (l : Lens Ω A B) : get_put Ω l → get_put Ω (lift_morph_lazy_list l) := by
   intro h
   simp
   intro a ω
-  rw [put_get] at h
+  rw [get_put] at h
   exact h (a,ω)
 
 lemma lift_list_persistent {A B Ω : Type u} (l : Lens Ω A B) : persistent Ω l → persistent Ω (lift_morph_lazy_list l) := by
@@ -735,8 +733,8 @@ def lift_synchronizationBlock_lazy_list {ΩL ΩR A B C D : Type u} (b : Synchron
     Φinh := b.Φinh
     f_persistent := (lift_list_persistent b.f) b.f_persistent
     g_persistent := (lift_list_persistent b.g) b.g_persistent
-    f_putget := (lift_list_putget b.f) b.f_wellbehaved.left
-    g_putget := (lift_list_putget b.g) b.g_wellbehaved.left
+    f_getput := (lift_list_getput b.f) b.f_wellbehaved.left
+    g_getput := (lift_list_getput b.g) b.g_wellbehaved.left
   }
 
 theorem lifted_synchronization_block_consistent_repair_right {ΩL ΩR A B C D : Type u}
