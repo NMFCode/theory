@@ -71,17 +71,16 @@ open Multiset
 open Set
 open List
 
-structure LazyPowerset (A : Type u) where
-  eval : Ω → Finset A
+structure LazyCollection (T : Type u → Type u) (A : Type u) where
+  eval : Ω → T A
 
-structure LazyMultiset (A : Type u) where
-  eval : Ω → Multiset A
+abbrev LazyPowerset (A : Type u) := LazyCollection Ω Finset A
 
-structure LazyList (A : Type u) where
-  eval : Ω → List A
+abbrev LazyMultiset (A : Type u) := LazyCollection Ω Multiset A
 
-structure LazySet (A : Type u) where
-  eval : Ω → Set A
+abbrev LazyList (A : Type u) := LazyCollection Ω List A
+
+abbrev LazySet (A : Type u) := LazyCollection Ω Set A
 
 @[simp]
 def lazy_set_func {A B : Type u} (f : morph Ω A B) : morph Ω (LazySet Ω A) (LazySet Ω B) :=
@@ -351,61 +350,59 @@ theorem left_repair_hippocratic {ΩL ΩR A B C D : Type u} (s : SynchronizationB
 # Collection-valued synchronization blocks
 -/
 
+structure LazyMutableCollection (T : Type u → Type u) (A : Type u) extends LazyCollection Ω T A where
+  apply : Ω → T A → Ω
 
-structure LazyPowersetCollection (A : Type u) extends LazyPowerset Ω A where
-  apply : Ω → Finset A → Ω
+abbrev LazyPowersetCollection (A : Type u) := LazyMutableCollection Ω Finset A
 
-structure LazyMultisetCollection (A : Type u) extends LazyMultiset Ω A where
-  apply : Ω → Multiset A → Ω
+abbrev LazyMultisetCollection (A : Type u) := LazyMutableCollection Ω Multiset A
 
-structure LazyListCollection (A : Type u) extends LazyList Ω A where
-  apply : Ω → List A → Ω
+abbrev LazyListCollection (A : Type u) := LazyMutableCollection Ω List A
 
-structure LazySetCollection (A : Type u) extends LazyOrderedSet Ω A where
-  apply : Ω → Set A → Ω
+abbrev LazySetCollection (A : Type u):= LazyMutableCollection Ω Set A
 
 @[simp]
-def eval_apply_powerset {A Ω : Type u} (c : LazyPowersetCollection Ω A) : Prop
-  := ∀ ω : Ω, ∀ s : Finset A, c.eval (c.apply ω s) = s
+def eval_apply_collection {A Ω : Type u} {T : Type u → Type u} (c : LazyMutableCollection Ω T A) : Prop
+  := ∀ ω : Ω, ∀ s : T A, c.eval (c.apply ω s) = s
 
 @[simp]
-def apply_eval_powerset {A Ω : Type u} (c : LazyPowersetCollection Ω A) : Prop
+def apply_eval_collection {A Ω : Type u} {T : Type u → Type u} (c : LazyMutableCollection Ω T A) : Prop
   := ∀ ω : Ω, c.apply ω (c.eval ω) = ω
 
-structure WellBehavedPowerset (Ω A : Type u) where
-  items : LazyPowersetCollection Ω A
-  eval_apply : eval_apply_powerset items
-  apply_eval : apply_eval_powerset items
+structure WellBehavedMutableCollection (Ω A : Type u) (T : Type u → Type u)  where
+  items : LazyMutableCollection Ω T A
+  eval_apply : eval_apply_collection items
+  apply_eval : apply_eval_collection items
 
-structure LazyPowersetCollectionSynchronizationBlock (ΩL ΩR A B C D : Type u) where
-  f : morph ΩL A (WellBehavedPowerset ΩL B)
-  g : morph ΩR C (WellBehavedPowerset ΩR D)
+structure LazyMutableCollectionSynchronizationBlock (ΩL ΩR A B C D : Type u) (T : Type u → Type u) where
+  f : morph ΩL A (WellBehavedMutableCollection ΩL B T)
+  g : morph ΩR C (WellBehavedMutableCollection ΩR D T)
   Φbase : A ≃ C
-  Φinh : Finset B ≃ Finset D
+  Φinh : T B ≃ T D
   f_stateless : stateless f
   g_stateless : stateless g
 
 @[simp]
-def consistent_powerset_collection {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+def consistent_collection {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
   : Prop
   := s.Φinh ((s.f (a,ωL)).1.items.eval ωL) = (s.g (c,ωR)).1.items.eval ωR
 
 @[simp]
-def repair_right_powerset_collection {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+def repair_right_collection {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
   : ΩR
   := (s.g (c,ωR)).1.items.apply ωR (s.Φinh ((s.f (a,ωL)).1.items.eval ωL))
 
 @[simp]
-def repair_left_powerset_collection {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+def repair_left_collection {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
   : ΩL
   := (s.f (a,ωL)).1.items.apply ωL (s.Φinh.invFun ((s.g (c,ωR)).1.items.eval ωR))
 
-theorem repair_right_powerset_collection_repairs_inconsistency {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
-  : consistent_powerset_collection s a c ωL (repair_right_powerset_collection s a c ωL ωR)
+theorem repair_right_collection_repairs_inconsistency {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_collection s a c ωL (repair_right_collection s a c ωL ωR)
   := by
      simp
      have h_g_stateless : (s.g (c, (s.g (c, ωR)).1.items.apply ωR (s.Φinh ((s.f (a, ωL)).1.items.eval ωL)))).1 = (s.g (c,ωR)).1
@@ -414,9 +411,9 @@ theorem repair_right_powerset_collection_repairs_inconsistency {ΩL ΩR A B C D 
      rw [h_g_stateless]
      rw [(s.g (c, ωR)).1.eval_apply ωR (s.Φinh ((s.f (a, ωL)).1.items.eval ωL))]
 
-theorem repair_left_powerset_collection_repairs_inconsistency {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
-  : consistent_powerset_collection s a c (repair_left_powerset_collection s a c ωL ωR) ωR
+theorem repair_left_collection_repairs_inconsistency {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_collection s a c (repair_left_collection s a c ωL ωR) ωR
   := by
      simp
      have h_f_stateless : (s.f (a, (s.f (a, ωL)).1.items.apply ωL (s.Φinh.symm ((s.g (c, ωR)).1.items.eval ωR)))).1 = (s.f (a,ωL)).1
@@ -426,18 +423,18 @@ theorem repair_left_powerset_collection_repairs_inconsistency {ΩL ΩR A B C D :
      rw [(s.f (a, ωL)).1.eval_apply ωL (s.Φinh.symm ((s.g (c, ωR)).1.items.eval ωR))]
      simp
 
-theorem repair_right_powerset_collection_hippocratic {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
-  : consistent_powerset_collection s a c ωL ωR → (repair_right_powerset_collection s a c ωL ωR) = ωR
+theorem repair_right_collection_hippocratic {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_collection s a c ωL ωR → (repair_right_collection s a c ωL ωR) = ωR
   := by
      simp
      intro h
      rw [h]
      exact (s.g (c, ωR)).1.apply_eval ωR
 
-theorem repair_left_powerset_collection_hippocratic {ΩL ΩR A B C D : Type u}
-  (s : LazyPowersetCollectionSynchronizationBlock ΩL ΩR A B C D) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
-  : consistent_powerset_collection s a c ωL ωR → (repair_left_powerset_collection s a c ωL ωR) = ωL
+theorem repair_left_collection_hippocratic {ΩL ΩR A B C D : Type u} {T : Type u → Type u}
+  (s : LazyMutableCollectionSynchronizationBlock ΩL ΩR A B C D T) (a : A) (c : C) (ωL : ΩL) (ωR : ΩR)
+  : consistent_collection s a c ωL ωR → (repair_left_collection s a c ωL ωR) = ωL
   := by
      simp
      intro h
