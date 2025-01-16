@@ -1,4 +1,6 @@
-import NMF.MutableTypeCategories
+import NMF.Collections
+import NMF.SynchronizationBlocks
+import NMF.CollectionValuedSynchronizationBlocks
 
 open MutableTypeCategories
 open Finset
