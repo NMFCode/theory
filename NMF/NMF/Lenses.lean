@@ -2,9 +2,9 @@ import NMF.MutableTypeCategories
 
 open CategoryTheory
 
-universe u
+universe u v
 
-variable (Ω : Type u)
+variable (Ω : Type v)
 
 namespace MutableTypeCategories
 
@@ -12,7 +12,7 @@ namespace MutableTypeCategories
 # Synchronization block theory and lenses
 -/
 
-structure Lens (Ω : Type u) (A B : Type u) where
+structure Lens (Ω : Type v) (A B : Type u) where
   get : morph Ω A B
   put : morph Ω (A × B) A
   get_side_effect_free : side_effect_free get

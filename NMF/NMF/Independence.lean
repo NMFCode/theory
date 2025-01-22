@@ -1,24 +1,19 @@
 import NMF.MutableTypeCategories
-import NMF.Collections
 import NMF.SynchronizationBlocks
 
 open MutableTypeCategories
-open Finset
-open Multiset
-open Set
-open List
 
-variable (Ω : Type u)
+variable (Ω ΩL ΩR: Type v)
 
 namespace MutableTypeCategories
 
-def independent {A B C D Ω : Type u} (f : morph Ω A B) (g : morph Ω C D) : Prop
+def independent {A B C D : Type u} {Ω : Type v} (f : morph Ω A B) (g : morph Ω C D) : Prop
   := ∀ c : (C×Ω), ∀ a : A, (f (a, c.2)).1 = (f (a, (g c).2)).1
 
-def mutual_independent {A B C D Ω : Type u} (f : Lens Ω A B) (g : Lens Ω C D) : Prop
+def mutual_independent {A B C D : Type u} (f : Lens Ω A B) (g : Lens Ω C D) : Prop
   := independent f.get g.put ∧ independent g.get f.put
 
-lemma repair_right_mutual_independent_consistent {A1 A2 B1 B2 C1 C2 D1 D2 ΩL ΩR}
+lemma repair_right_mutual_independent_consistent {A1 A2 B1 B2 C1 C2 D1 D2}
   (s1 : SynchronizationBlock ΩL ΩR A1 B1 C1 D1) (s2 : SynchronizationBlock ΩL ΩR A2 B2 C2 D2)
   (a1 : A1) (a2 : A2) (c1 : C1) (c2 : C2) (ωL : ΩL) (ωR : ΩR) (h : independent s1.g.get s2.g.put)
   : let ωR1 := (repair_right s1 a1 c1 ωL ωR)
@@ -32,7 +27,7 @@ lemma repair_right_mutual_independent_consistent {A1 A2 B1 B2 C1 C2 D1 D2 ΩL Ω
      simp at h_consistent_after2
      rw [← h_consistent_after2]
 
-lemma repair_right_chained_hippocratic {A1 A2 B1 B2 C1 C2 D1 D2 ΩL ΩR}
+lemma repair_right_chained_hippocratic {A1 A2 B1 B2 C1 C2 D1 D2}
   (s1 : SynchronizationBlock ΩL ΩR A1 B1 C1 D1) (s2 : SynchronizationBlock ΩL ΩR A2 B2 C2 D2)
   (a1 : A1) (a2 : A2) (c1 : C1) (c2 : C2) (ωL : ΩL) (ωR : ΩR)
   : consistent s1 ωL ωR a1 c1 ∧ consistent s2 ωL ωR a2 c2 →
@@ -42,7 +37,7 @@ lemma repair_right_chained_hippocratic {A1 A2 B1 B2 C1 C2 D1 D2 ΩL ΩR}
      rw [repair_right_hippocratic s1 ωL ωR a1 c1 h.left, repair_right_hippocratic s2]
      exact h.right
 
-lemma repair_left_mutual_independent_consistent {A1 A2 B1 B2 C1 C2 D1 D2 ΩL ΩR}
+lemma repair_left_mutual_independent_consistent {A1 A2 B1 B2 C1 C2 D1 D2}
   (s1 : SynchronizationBlock ΩL ΩR A1 B1 C1 D1) (s2 : SynchronizationBlock ΩL ΩR A2 B2 C2 D2)
   (a1 : A1) (a2 : A2) (c1 : C1) (c2 : C2) (ωL : ΩL) (ωR : ΩR) (h : independent s1.f.get s2.f.put)
   : let ωL1 := (repair_left s1 a1 c1 ωL ωR)
@@ -58,7 +53,7 @@ lemma repair_left_mutual_independent_consistent {A1 A2 B1 B2 C1 C2 D1 D2 ΩL ΩR
      nth_rewrite 2 [← h_consistent_after2]
      rfl
 
-lemma repair_left_chained_hippocratic {A1 A2 B1 B2 C1 C2 D1 D2 ΩL ΩR}
+lemma repair_left_chained_hippocratic {A1 A2 B1 B2 C1 C2 D1 D2}
   (s1 : SynchronizationBlock ΩL ΩR A1 B1 C1 D1) (s2 : SynchronizationBlock ΩL ΩR A2 B2 C2 D2)
   (a1 : A1) (a2 : A2) (c1 : C1) (c2 : C2) (ωL : ΩL) (ωR : ΩR)
   : consistent s1 ωL ωR a1 c1 ∧ consistent s2 ωL ωR a2 c2 →

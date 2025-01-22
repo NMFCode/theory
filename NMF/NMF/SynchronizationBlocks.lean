@@ -3,9 +3,9 @@ import NMF.Lenses
 
 open CategoryTheory
 
-universe u
+universe u v
 
-variable (Ω : Type u)
+variable (Ω : Type v)
 
 namespace MutableTypeCategories
 
